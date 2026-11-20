@@ -6,6 +6,8 @@
  * 另外做一层 URL 强制分组校验：
  *   ?group=control   一律不渲染
  *   ?group=treatment 一律渲染
+ *
+ * 回答逻辑：严格基于医生页面公开信息，不超纲、不编造。
  * ========================================================= */
 (function () {
   'use strict';
@@ -20,73 +22,105 @@
   if (document.body.getAttribute('data-page') !== 'doctor') return;
   if (document.getElementById('ai-root')) return;
 
-  var DOCTOR_NAME = '张明远';
+  /* ========== 1. 页面医生信息库（严格受限，不超纲） ========== */
+  var doctorInfo = {
+    name: '张明远',
+    dept: '心血管内科',
+    title: '主任医师、教授',
+    exp: '从医22年',
+    hospital: '三级甲等医院',
+    clinic: '周一上午、周三下午（专家门诊）',
+    fees: {
+      text: '图文问诊 88元/次（48小时内不限次沟通）',
+      phone: '电话问诊 199元/15分钟'
+    },
+    note: '问诊费用不包含检查、药品和线下挂号；若需线下就诊，会告知挂号科室及携带资料。',
+    scope: ['心脏不适', '胸闷', '心血管', '高血压', '心绞痛'],
+    emergency: '若出现持续胸痛、呼吸困难、晕厥等情况，请立即拨打120或前往线下急诊。',
+    disclaimer: 'AI回答由预设内容生成，仅供参考；急症请立即线下就医或拨打120。'
+  };
 
-  var GREETING = '您好，我是' + DOCTOR_NAME + '医生的 AI 助理。您可以问我医生擅长哪些疾病、问诊费用、就诊流程等常见问题。\n\n我的回答基于医生公开资料与常见问题整理，仅供参考，不能替代医生的诊断和处方。';
+  var GREETING = '您好，我是' + doctorInfo.name + '医生的 AI 助理。您可以问我心脏相关问题是否合适、问诊收费、需要做哪些检查、吃什么药、平时生活注意事项等。\n\n我的回答仅基于医生页面公开资料，不构成医疗建议。';
 
-  var FALLBACK = '这个问题我暂时没有足够的信息来回答。您可以换一种问法，或者直接向' + DOCTOR_NAME + '医生本人提问（图文问诊 88 元/次，48 小时内不限次沟通）。\n\n如果出现持续胸痛、呼吸困难、晕厥等情况，请立即拨打 120 或前往线下急诊。';
+  /* ========== 2. 全量匹配逻辑（覆盖快捷按钮 + 自由提问） ========== */
+  function getAIReply(rawInput) {
+    var input = String(rawInput || '').toLowerCase().replace(/\s/g, '');
 
-  /* 预设问答库：keys 为关键词，q 为快捷问题，a 为回答 */
-  var KB = [
-    {
-      id: 'severity',
-      keys: ['严重', '危险', '要紧', '担心', '会不会'],
-      q: '这个病严重吗？',
-      a: '病情是否严重，需要结合具体诊断、血压血脂等指标水平，以及是否合并其他疾病来判断，仅凭文字描述无法下定论。\n\n' + DOCTOR_NAME + '医生擅长高血压、冠心病、心律失常等疾病的长期管理。如果只是体检指标偏高或偶发心慌，可以带上近期检查报告在线问诊评估；如果出现持续胸痛、呼吸困难、晕厥，或血压超过 180/110 mmHg 并伴明显不适，请立即线下急诊。'
-    },
-    {
-      id: 'medicine',
-      keys: ['吃什么药', '用药', '药物', '吃药', '处方', '降压药', '他汀', '副作用'],
-      q: '需要吃什么药？',
-      a: '用药需要医生根据您的年龄、肝肾功能、合并疾病以及正在服用的药物来确定，AI 不能开具或推荐具体处方。\n\n' + DOCTOR_NAME + '医生在图文问诊中可以根据您上传的检查单和病史给出用药建议，必要时开具电子处方。请不要自行加减药量，也不要参照他人的用药经验自行购药。'
-    },
-    {
-      id: 'tests',
-      keys: ['检查', '化验', '心电图', '彩超', '抽血', 'CT', '造影'],
-      q: '需要做哪些检查？',
-      a: '心血管常见的基础检查包括：血压监测、血常规、血脂、血糖、肝肾功能、心电图；必要时做心脏彩超、动态心电图（Holter）或冠脉 CTA。\n\n具体项目要结合症状由医生判断。您可以把已有的检查报告拍照上传，医生会告诉您还缺哪些项目，尽量避免重复检查。'
-    },
-    {
-      id: 'price',
-      keys: ['多少钱', '价格', '费用', '收费', '贵不贵', '挂号费', '医保'],
-      q: '问诊怎么收费？',
-      a: DOCTOR_NAME + '医生的图文问诊为 88 元/次，48 小时内不限次数沟通；电话问诊为 199 元/15 分钟。\n\n问诊费用不包含检查、药品和线下挂号费用。若医生判断需要线下就诊，会告知您挂号的科室和需要携带的资料。'
-    },
-    {
-      id: 'expertise',
-      keys: ['擅长', '看什么病', '主治', '专业', '专长'],
-      q: '医生擅长哪些疾病？',
-      a: DOCTOR_NAME + '医生是心血管内科主任医师、教授，擅长高血压（尤其是难治性高血压）、冠心病、心律失常、心力衰竭和高脂血症的诊断与长期管理，同时长期开展心血管疾病的一级预防与随访。'
-    },
-    {
-      id: 'lifestyle',
-      keys: ['注意', '饮食', '运动', '生活', '忌口', '盐', '熬夜', '戒烟', '喝酒'],
-      q: '平时生活要注意什么？',
-      a: '心血管疾病日常管理通常包括：每天食盐控制在 5 克以内，戒烟限酒，每周至少 150 分钟中等强度有氧运动（如快走），保持规律作息和情绪稳定，并坚持家庭自测血压并记录。\n\n具体的血压、血脂、体重目标值需要医生结合您的情况设定。'
-    },
-    {
-      id: 'duration',
-      keys: ['多久', '多长时间', '能好', '康复', '疗程', '治愈'],
-      q: '大概多久能好？',
-      a: '高血压、冠心病等多属于需要长期管理的慢性疾病，治疗目标通常是“控制达标、减少发作”，而不是短期治愈。\n\n多数人在规范用药和调整生活方式后 2 到 4 周内指标会趋于稳定，但用药方案需要按医嘱复诊调整。具体疗程请以医生面诊意见为准。'
-    },
-    {
-      id: 'process',
-      keys: ['怎么问诊', '流程', '怎么用', '如何问诊', '上传', '预约', '回复时间'],
-      q: '问诊流程是怎样的？',
-      a: '在医生主页选择图文问诊或电话问诊，提交病情描述和检查资料后，医生通常会在 24 小时内回复（工作时间更快）。\n\n图文问诊 48 小时内可以不限次数追问。如果病情紧急或症状加重，请直接到线下急诊，不要等待线上回复。'
-    },
-    {
-      id: 'emergency',
-      keys: ['胸痛', '呼吸困难', '晕倒', '急救', '120', '心梗', '胸闷'],
-      q: '出现胸痛怎么办？',
-      a: '如果出现压榨样胸痛持续超过 15 分钟，并伴有大汗、恶心、呼吸困难，或疼痛放射到左肩、下颌，请立即拨打 120，不要自行驾车，也不要等待在线回复。\n\n如果症状短暂且已经缓解，也建议尽快到线下心内科就诊评估。'
+    // 【急诊兜底】最高优先级
+    if (/持续胸痛|呼吸困难|晕厥|急救|120|快死了|撑不住/.test(input)) {
+      return doctorInfo.emergency + '\n\n（' + doctorInfo.disclaimer + '）';
     }
+
+    // 【快捷按钮1：吃什么药？】
+    if (/吃什么药|用药|开药|药方|吃什么/.test(input)) {
+      return '关于用药，' + doctorInfo.name + '医生（' + doctorInfo.dept + '）会在图文/电话问诊了解详情后指导。' + doctorInfo.fees.text + '。注意：费用不含药品，AI 不提供处方，请遵医嘱。\n\n（' + doctorInfo.disclaimer + '）';
+    }
+
+    // 【快捷按钮2：需要做哪些检查？】
+    if (/做哪些检查|检查项目|体检|化验|心电图|抽血|彩超|ct|造影/.test(input)) {
+      return '检查项目需' + doctorInfo.name + '医生（' + doctorInfo.dept + '）根据您的具体症状判断，问诊后会告知需线下做的检查及携带资料。' + doctorInfo.note + ' 建议先图文问诊：' + doctorInfo.fees.text + '。\n\n（' + doctorInfo.disclaimer + '）';
+    }
+
+    // 【快捷按钮3：问诊怎么收费？ / 费用】
+    if (/收费|多少钱|费用|价格|问诊|图文|电话|挂号费|贵不贵|医保/.test(input)) {
+      return doctorInfo.name + '医生问诊收费：①' + doctorInfo.fees.text + '；②' + doctorInfo.fees.phone + '。' + doctorInfo.note + ' 出诊：' + doctorInfo.clinic + '（' + doctorInfo.hospital + '）。\n\n（' + doctorInfo.disclaimer + '）';
+    }
+
+    // 【快捷按钮4：平时生活要注意？ / 日常注意】
+    if (/生活注意|日常|保养|调理|饮食|运动|注意什么|作息|戒烟|限酒|低盐|低盐低脂/.test(input)) {
+      return '心血管日常建议（仅供参考）：低盐低脂饮食、适度运动、规律作息、监测血压。具体需结合您情况，建议图文问诊（' + doctorInfo.fees.text + '）让' + doctorInfo.name + '医生（' + doctorInfo.dept + '，' + doctorInfo.exp + '）评估。\n\n（' + doctorInfo.disclaimer + '）';
+    }
+
+    // 【核心：合适吗 / 心脏不舒服 / 科室匹配】
+    var isHeart = /心脏|心血管|胸闷|心慌|心绞痛|高血压|冠心病|心率|心律/.test(input);
+    var askSuit = /合适吗|能看吗|挂这个科|看这个病|找他吗|能不能|可不可以|适合吗/.test(input);
+
+    if (isHeart) {
+      return '合适的。' + doctorInfo.name + '医生是' + doctorInfo.hospital + ' ' + doctorInfo.dept + ' ' + doctorInfo.title + '（' + doctorInfo.exp + '），擅长心血管相关问题。您可图文问诊：' + doctorInfo.fees.text + '；或电话：' + doctorInfo.fees.phone + '。出诊：' + doctorInfo.clinic + '。\n若持续胸痛/呼吸困难请立即急诊。\n\n（' + doctorInfo.disclaimer + '）';
+    }
+    if (askSuit) {
+      return '张医生主攻' + doctorInfo.dept + '（' + doctorInfo.title + '，' + doctorInfo.exp + '），非心血管问题（如骨科/皮肤科）建议挂对应科室；若属心脏/心血管范畴则非常合适。' + doctorInfo.fees.text + '。\n\n（' + doctorInfo.disclaimer + '）';
+    }
+
+    // 【出诊时间 / 挂号】
+    if (/出诊|挂号|上班|门诊时间|周几|什么时候上班/.test(input)) {
+      return '张医生出诊时间：' + doctorInfo.clinic + '（专家门诊，' + doctorInfo.hospital + '）。问诊收费：' + doctorInfo.fees.text + '。若需线下就诊，问诊后会告知挂号科室及资料。\n\n（' + doctorInfo.disclaimer + '）';
+    }
+
+    // 【职称/资历】
+    if (/职称|资历|经验|教授|主任|主任医师|博士生导师|多少年/.test(input)) {
+      return doctorInfo.name + '医生：' + doctorInfo.title + '，' + doctorInfo.exp + '，执业于' + doctorInfo.hospital + ' ' + doctorInfo.dept + '。\n\n（' + doctorInfo.disclaimer + '）';
+    }
+
+    // 【兜底：只引导页面信息，不瞎编】
+    return '我仅基于张明远医生页面信息回答：他是' + doctorInfo.hospital + doctorInfo.dept + doctorInfo.title + '（' + doctorInfo.exp + '），' + doctorInfo.fees.text + '。您可问："心脏不适合适吗 / 吃什么药 / 做哪些检查 / 收费多少 / 出诊时间 / 生活注意事项"。\n\n（' + doctorInfo.disclaimer + '）';
+  }
+
+  /* ========== 3. 原始意图提取（用于数据记录） ========== */
+  function detectIntent(text) {
+    var input = String(text || '').toLowerCase().replace(/\s/g, '');
+    if (/持续胸痛|呼吸困难|晕厥|急救|120|快死了|撑不住/.test(input)) return 'emergency';
+    if (/吃什么药|用药|开药|药方|吃什么/.test(input)) return 'medicine';
+    if (/做哪些检查|检查项目|体检|化验|心电图|抽血|彩超|ct|造影/.test(input)) return 'tests';
+    if (/收费|多少钱|费用|价格|问诊|图文|电话|挂号费|贵不贵|医保/.test(input)) return 'price';
+    if (/生活注意|日常|保养|调理|饮食|运动|注意什么|作息|戒烟|限酒|低盐|低盐低脂/.test(input)) return 'lifestyle';
+    var isHeart = /心脏|心血管|胸闷|心慌|心绞痛|高血压|冠心病|心率|心律/.test(input);
+    var askSuit = /合适吗|能看吗|挂这个科|看这个病|找他吗|能不能|可不可以|适合吗/.test(input);
+    if (isHeart || askSuit) return 'suitability';
+    if (/出诊|挂号|上班|门诊时间|周几|什么时候上班/.test(input)) return 'schedule';
+    if (/职称|资历|经验|教授|主任|主任医师|博士生导师|多少年/.test(input)) return 'qualification';
+    return 'fallback';
+  }
+
+  /* ========== 4. 快捷按钮定义 ========== */
+  var QUICK = [
+    { id: 'medicine', q: '需要吃什么药？' },
+    { id: 'tests', q: '需要做哪些检查？' },
+    { id: 'price', q: '问诊怎么收费？' },
+    { id: 'lifestyle', q: '平时生活要注意什么？' }
   ];
 
-  var QUICK_QUESTIONS = ['severity', 'medicine', 'tests', 'price', 'lifestyle', 'process'];
-
-  /* ---------------- 构建界面 ---------------- */
+  /* ========== 5. 构建界面（沿用原 id：ai-root / ai-fab / ai-panel / ai-body / ai-quick / ai-form / ai-input） ========== */
 
   var root = document.createElement('div');
   root.id = 'ai-root';
@@ -100,18 +134,18 @@
       '<header class="ai-head">',
         '<div class="ai-head-avatar">AI</div>',
         '<div class="ai-head-text">',
-          '<strong>' + DOCTOR_NAME + '医生的 AI 助理</strong>',
-          '<span>基于公开资料与常见问题生成 · 仅供参考</span>',
+          '<strong>' + doctorInfo.name + '医生的 AI 助理</strong>',
+          '<span>基于医生页面公开资料 · 仅供参考</span>',
         '</div>',
         '<button type="button" class="ai-close" id="ai-close" aria-label="关闭 AI 助理">×</button>',
       '</header>',
       '<div class="ai-body" id="ai-body" role="log" aria-live="polite"></div>',
       '<div class="ai-quick" id="ai-quick"></div>',
       '<form class="ai-inputbar" id="ai-form">',
-        '<input id="ai-input" type="text" autocomplete="off" maxlength="120" placeholder="输入您的问题，如：需要吃什么药？" aria-label="输入问题">',
+        '<input id="ai-input" type="text" autocomplete="off" maxlength="120" placeholder="输入您的问题，如：心脏不舒服找他合适吗？" aria-label="输入问题">',
         '<button type="submit" class="ai-send">发送</button>',
       '</form>',
-      '<p class="ai-disclaimer">AI 回答由预设内容生成，不构成医疗建议；急症请立即线下就医或拨打 120。</p>',
+      '<p class="ai-disclaimer">' + doctorInfo.disclaimer + '</p>',
     '</section>'
   ].join('');
 
@@ -128,22 +162,16 @@
   var isOpen = false;
   var greeted = false;
 
-  /* ---------------- 渲染快捷问题 ---------------- */
-
-  QUICK_QUESTIONS.forEach(function (id) {
-    var item = KB.filter(function (k) { return k.id === id; })[0];
-    if (!item) return;
+  /* 渲染快捷问题 */
+  QUICK.forEach(function (item) {
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = item.q;
-    btn.addEventListener('click', function () {
-      ask(item.q, 'quick', item.id);
-    });
+    btn.addEventListener('click', function () { ask(item.q, 'quick', item.id); });
     quick.appendChild(btn);
   });
 
-  /* ---------------- 消息 ---------------- */
-
+  /* 消息渲染 */
   function addMessage(role, text) {
     var msg = document.createElement('div');
     msg.className = 'ai-msg ai-msg-' + role;
@@ -164,38 +192,26 @@
     return msg;
   }
 
-  function matchAnswer(text) {
-    var lower = String(text || '').toLowerCase();
-    for (var i = 0; i < KB.length; i++) {
-      var item = KB[i];
-      for (var j = 0; j < item.keys.length; j++) {
-        if (lower.indexOf(item.keys[j].toLowerCase()) !== -1) return item;
-      }
-    }
-    return null;
-  }
-
   function ask(text, source, presetIntent) {
     var question = String(text || '').trim();
     if (!question) return;
 
     addMessage('user', question);
-    OD.aiLog('user', question, presetIntent || '', source);
+    OD.aiLog('user', question, presetIntent || detectIntent(question), source);
 
     var typing = showTyping();
-    var delay = 650 + Math.min(650, question.length * 25);
+    var delay = 500 + Math.min(500, question.length * 20);
 
     window.setTimeout(function () {
       if (typing.parentNode) typing.parentNode.removeChild(typing);
-      var hit = matchAnswer(question);
-      var answer = hit ? hit.a : FALLBACK;
+      var answer = getAIReply(question);
+      var intent = presetIntent || detectIntent(question);
       addMessage('assistant', answer);
-      OD.aiLog('assistant', answer, hit ? hit.id : 'fallback', source);
+      OD.aiLog('assistant', answer, intent, source);
     }, delay);
   }
 
-  /* ---------------- 开合面板 ---------------- */
-
+  /* 开合面板 */
   function openPanel() {
     if (isOpen) return;
     isOpen = true;
@@ -225,14 +241,7 @@
     OD.aiClose();
   }
 
-  fab.addEventListener('click', function () {
-    if (isOpen) {
-      closePanel();
-    } else {
-      openPanel();
-    }
-  });
-
+  fab.addEventListener('click', function () { isOpen ? closePanel() : openPanel(); });
   closeBtn.addEventListener('click', closePanel);
 
   document.addEventListener('keydown', function (e) {
@@ -247,8 +256,7 @@
     ask(value, 'input');
   });
 
-  /* ---------------- 首次进入的轻提示 ---------------- */
-
+  /* 首次进入的轻提示 */
   window.setTimeout(function () {
     if (isOpen) return;
     var tip = document.createElement('div');
