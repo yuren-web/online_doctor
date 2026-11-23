@@ -1731,10 +1731,11 @@ html[data-group="control"] #ai-root {
 
 .ai-head-text span {
   font-size: 11px;
+  line-height: 1.4;
   opacity: 0.82;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .ai-close {
@@ -1774,13 +1775,16 @@ html[data-group="control"] #ai-root {
 }
 
 .ai-bubble {
-  max-width: 84%;
+  max-width: 85%;
   padding: 10px 13px;
   border-radius: 12px;
   font-size: 13px;
   line-height: 1.75;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .ai-msg-assistant .ai-bubble {
@@ -1795,6 +1799,35 @@ html[data-group="control"] #ai-root {
   background: var(--brand);
   color: #fff;
   border-top-right-radius: 4px;
+}
+
+/* 气泡内 Markdown 排版：完整展示，不折叠、不截断 */
+.ai-bubble .ai-md-h {
+  font-weight: 600;
+  color: var(--brand-dark, #00795f);
+  margin: 6px 0 2px;
+}
+
+.ai-bubble ul,
+.ai-bubble ol {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+
+.ai-bubble li {
+  margin: 2px 0;
+}
+
+.ai-bubble strong {
+  font-weight: 700;
+}
+
+.ai-bubble code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #eef6f3;
+  font-size: 12px;
+  word-break: break-word;
 }
 
 .ai-typing .ai-bubble {
