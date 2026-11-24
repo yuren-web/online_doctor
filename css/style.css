@@ -1755,6 +1755,81 @@ html[data-group="control"] #ai-root {
   background: rgba(255, 255, 255, 0.16);
 }
 
+/* 静态模式：顶部症状标签，横向自动换行 */
+.ai-symptoms {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 12px 14px;
+  background: #fff;
+  border-bottom: 1px solid #f0f3f2;
+  max-height: 46%;
+  overflow-y: auto;
+}
+
+.ai-symptoms[hidden],
+.ai-quick[hidden],
+.ai-inputbar[hidden] {
+  display: none;
+}
+
+.ai-tag {
+  border: 1px solid #dcefe8;
+  background: #f6fcfa;
+  color: #0a7a5f;
+  border-radius: 14px;
+  padding: 6px 11px;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+}
+
+.ai-tag:hover {
+  background: var(--brand-light);
+  border-color: #b6e5d6;
+}
+
+/* 静态模式：选项与重新选择 */
+.ai-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-left: 6px;
+}
+
+.ai-option {
+  border: 1px solid #bfe8da;
+  background: #fff;
+  color: #087a5f;
+  border-radius: 16px;
+  padding: 8px 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.ai-option:hover {
+  background: #f0fbf7;
+  border-color: #9ddcc8;
+}
+
+.ai-reset {
+  align-self: center;
+  margin: 4px auto 2px;
+  border: 0;
+  background: var(--brand);
+  color: #fff;
+  border-radius: 18px;
+  padding: 8px 22px;
+  font-size: 13px;
+}
+
+.ai-reset:hover {
+  background: var(--brand-dark);
+}
+
 .ai-body {
   flex: 1;
   overflow-y: auto;
@@ -2226,6 +2301,21 @@ html[data-group="control"] #ai-root {
 
   .ai-panel.open {
     transform: translate(50%, 0) scale(1);
+  }
+
+  .ai-symptoms {
+    gap: 6px;
+    padding: 10px 12px;
+  }
+
+  .ai-tag {
+    font-size: 11.5px;
+    padding: 6px 9px;
+  }
+
+  .ai-option {
+    font-size: 12.5px;
+    padding: 7px 12px;
   }
 
   .footer-inner {
