@@ -1815,6 +1815,42 @@ html[data-group="control"] #ai-root {
   border-color: #9ddcc8;
 }
 
+.ai-option-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.ai-option-primary:hover {
+  background: var(--brand-dark);
+  border-color: var(--brand-dark);
+}
+
+.ai-end-actions {
+  justify-content: center;
+  padding: 2px 0 4px;
+}
+
+/* 对照组：返回问卷按钮 */
+.od-back-survey {
+  position: fixed;
+  left: 18px;
+  bottom: 22px;
+  z-index: 46;
+  border: 1px solid #bfe8da;
+  background: #fff;
+  color: #0a7a5f;
+  border-radius: 20px;
+  padding: 10px 18px;
+  font-size: 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.od-back-survey:hover {
+  background: #f0fbf7;
+  border-color: #9ddcc8;
+}
+
 .ai-reset {
   align-self: center;
   margin: 4px auto 2px;
@@ -2316,6 +2352,13 @@ html[data-group="control"] #ai-root {
   .ai-option {
     font-size: 12.5px;
     padding: 7px 12px;
+  }
+
+  .od-back-survey {
+    left: 12px;
+    bottom: 84px;
+    padding: 9px 16px;
+    font-size: 13px;
   }
 
   .footer-inner {

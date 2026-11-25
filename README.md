@@ -1,6 +1,6 @@
 # 在线问诊 AI 助理实验平台
 
-一个可直接运行的在线问诊实验页面，风格参照好大夫在线。用于比较「有 / 无 AI 助理」对患者问诊决策的影响：处理组展示 AI 助理悬浮入口，对照组不展示，仅能基于页面既有信息决策。
+一个可直接运行的在线问诊实验页面，风格参照好大夫在线。当前版本用于见数（Credamo）RCT 实验：处理组展示本地硬编码的 AI 助理（内部 A/B/C 三条对话路径），对照组不展示 AI，仅浏览医生主页并可返回问卷。全程不调用任何大模型或外部 API。
 
 纯静态实现，无外部依赖、无后端，可直接双击打开或部署到任意静态托管平台。
 
@@ -13,8 +13,9 @@ online_doctor/
 ├── css/
 │   └── style.css           # 全部样式（含响应式与 AI 悬浮窗）
 ├── js/
-│   ├── main.js             # 分组逻辑、行为埋点、停留时长、数据导出、见数跳转
-│   └── ai.js               # AI 助理：悬浮入口 + 预设问答（仅处理组渲染）
+│   ├── main.js             # 分组、RCT 埋点、停留时长、返回问卷、数据导出
+│   ├── ai.js               # 处理组 AI 助理：本地 A/B/C 状态机（零网络请求）
+│   └── worker.js           # 原 Cloudflare Worker（已短路停用，保留存档）
 ├── data/
 │   └── doctor-info.json    # 医生与评价数据（页面数据镜像，便于后续接后端）
 └── README.md
@@ -40,17 +41,15 @@ python -m http.server 8000
 
 | 场景 | 链接 |
 | --- | --- |
-| 处理组（展示 AI 助理） | `index.html?group=treatment&subject_id=S001` |
-| 对照组（无 AI 助理） | `index.html?group=control&subject_id=S001` |
-| 未指定分组 | 自动随机（默认各 50%），并把结果与 `subject_id` 写回地址栏 |
+| 处理组（展示 AI 助理） | `doctor.html?group=treatment&subject_id=S001` |
+| 对照组（无 AI 助理） | `doctor.html?group=control&subject_id=S001` |
+| 未指定分组 | 默认进入对照组（不展示 AI） |
 
 分组优先级（从高到低）：
 
 1. URL 中的 `group=treatment|control`
 2. `js/main.js` 中的 `CONFIG.forceGroup`（本地调试用，默认 `null`）
-3. 当前浏览器会话中该被试已确定的分组
-4. 该 `subject_id` 在 localStorage 中记录过的分组
-5. 按 `CONFIG.treatmentRatio` 随机分配
+3. `CONFIG.defaultGroup`（默认 `control`）
 
 刷新页面、从列表页进入医生主页时，分组与被试 ID 都会自动带上（内部链接由 `main.js` 自动补参数），不会中途改变。
 
@@ -104,6 +103,27 @@ localStorage.removeItem('od_records_v1');
 sessionStorage.removeItem('od_ctx_v1');
 ```
 
+## RCT 实验数据（expData）
+
+`js/main.js` 在页面加载时创建全局 `window.expData`，并同步挂到 `window.OD.expData`：
+
+```js
+{
+  group: 'treatment',   // treatment / control
+  path: 'A',            // A / B / C / none
+  nodes: ['A2','A3','A5'], // 已展示的状态机节点
+  startTime: 1730000000000,
+  stay_time: 0,         // 毫秒，定时与跳转前更新
+  backClicked: false,
+  homepageViewed: true
+}
+```
+
+- 处理组开场三选一确定 `path`，之后每次展示 AI 节点都会 push 到 `nodes`
+- 对照组 `path` 恒为 `none`，`nodes` 为空
+- 返回问卷门槛：停留 ≥ 60 秒；处理组还需至少点击 3 次对话选项
+- 未达门槛时点击返回，只提示剩余秒数/次数，不跳转
+
 ## 见数（Credamo）对接
 
 在 `js/main.js` 顶部修改问卷地址：
@@ -111,29 +131,31 @@ sessionStorage.removeItem('od_ctx_v1');
 ```js
 var CONFIG = {
   credamoUrl: 'https://www.credamo.com/xxx', // 替换为真实问卷链接
-  treatmentRatio: 0.5,
+  defaultGroup: 'control',
+  minStayMs: 60000,
+  minTreatmentTaps: 3,
   forceGroup: null
 };
 ```
 
-被试在弹窗中提交问诊方式后，会记录决策并跳转到该地址，自动携带参数：
+点击「返回问卷」并满足门槛后，会跳转到该地址，自动携带参数：
 
 | 参数 | 说明 |
 | --- | --- |
 | `subject_id` | 被试 ID（与页面记录一一对应） |
 | `group` | `treatment` / `control` |
-| `ai_used` | 是否使用过 AI 助理：`1` / `0` |
-| `decision` | 是否完成决策：`1` / `0` |
-| `time_to_decision_ms` | 决策耗时（毫秒） |
-| `dwell_ms` | 总停留时长（毫秒） |
+| `path` | 处理组内部路径：`A` / `B` / `C`；对照组为 `none` |
+| `nodes` | 已展示节点，逗号分隔，如 `A2,A3,A5,A6,END_A`；对照组为空 |
+| `stay` | 页面停留时长（毫秒） |
+| `back` | 固定为 `1`，表示从「返回问卷」按钮进入 |
 
 示例：
 
 ```
-https://www.credamo.com/xxx?subject_id=S001&group=treatment&ai_used=1&decision=1&time_to_decision_ms=96320&dwell_ms=180430
+https://www.credamo.com/xxx?subject_id=S001&group=treatment&path=A&nodes=A2%2CA3%2CA5%2CA6%2CEND_A&stay=96320&back=1
 ```
 
-未配置链接时，页面会提示「问卷链接尚未配置」，并在弹窗内展示完成状态，不会跳转到无效地址。
+未配置链接时，页面会提示「问卷链接尚未配置」，不会跳转到无效地址。
 
 ## 部署
 
@@ -154,10 +176,24 @@ https://your-domain.com/index.html?group=treatment&subject_id=S001
 ## 自定义
 
 - **医生信息 / 评价**：直接修改 `doctor.html` 中对应用户可见文本（列表页同步修改 `index.html`），并更新 `data/doctor-info.json`
-- **AI 预设问答**：修改 `js/ai.js` 中的 `KB` 数组；每项包含 `keys`（关键词）、`q`（快捷问题）、`a`（回答），新增条目会自动参与关键词匹配
-- **AI 快捷问题**：调整 `js/ai.js` 中的 `QUICK_QUESTIONS`（填写 `KB` 的 `id`）
+- **AI 对话剧本**：修改 `js/ai.js` 中的 `SCRIPT` 对象；A/B/C 三条路径分别对应 `SCRIPT.A`、`SCRIPT.B`、`SCRIPT.C`，每个节点包含 `text` 和 `options`，`next` 指向下一个节点，`end: true` 表示结尾节点
+- **开场三选一**：调整 `OPENING_CHOICES`（路径 + 标签文案 + 起始节点）
+- **返回门槛**：修改 `js/main.js` 中的 `minStayMs` 与 `minTreatmentTaps`
 - **配色**：修改 `css/style.css` 顶部 `:root` 中的 CSS 变量
-- **分组比例**：修改 `CONFIG.treatmentRatio`（例如 `0.5` 表示各半）
+- **分组默认值**：修改 `CONFIG.defaultGroup`（默认 `control`）
+
+## A/B/C 对话路径
+
+三条路径均为处理组内部路径，不作为见数分流组别：
+
+| 路径 | 关注点 | 起点 | 结尾 |
+| --- | --- | --- | --- |
+| A | 疾病原因 + 医生专业能力 | `A2` | `END_A` |
+| B | 疾病风险 + 服务质量 | `B2` | `END_B` |
+| C | 医生可信度 + 潜在机会主义 | `C2` | `END_C` |
+
+所有回复均为本地写死文本；页面不加载大模型、不发起任何外部请求。`worker.js` 入口已直接返回 `410 llm_disabled`，即使被误调用也不会触达 DeepSeek。
+
 
 ## 说明
 

@@ -94,6 +94,14 @@ export default {
       ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' }
       : {};
 
+    // RCT 实验：彻底停用大模型。前端已改为本地硬编码状态机，
+    // 这里直接短路，确保任何请求都不会触达 DeepSeek。
+    // 下方原有转发逻辑仅作存档，不再执行。
+    return json({
+      error: 'llm_disabled',
+      detail: 'This experiment uses a local static state machine only.'
+    }, 410, env, corsHeaders);
+
     // 读 key
     const apiKey = (env && env.DEEPSEEK_API_KEY) ? String(env.DEEPSEEK_API_KEY).trim() : '';
     if (!apiKey) {

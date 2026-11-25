@@ -13,12 +13,16 @@
     // 见数问卷地址：部署前替换为真实链接
     credamoUrl: 'https://www.credamo.com/xxx',
 
-    // 未指定 group 参数时的随机分组比例（处理组占比）
-    treatmentRatio: 0.5,
+    // 未指定 group 参数时默认进入对照组（新的 RCT 规则：无参数 = control）
+    defaultGroup: 'control',
 
     // 强制分组：'treatment' | 'control' | null
-    // 置为 null 时按上面的比例随机；仅用于本地调试
+    // 仅用于本地调试；URL 参数优先级最高
     forceGroup: null,
+
+    // 返回问卷门槛
+    minStayMs: 60000,
+    minTreatmentTaps: 3,
 
     // 数据存储
     recordsKey: 'od_records_v1',
@@ -98,28 +102,19 @@
   var group;
   var groupSource;
 
-  // URL 参数优先级最高，且是强制分组：
-  //   ?group=treatment → 一定进入处理组（展示 AI 助理）
-  //   ?group=control   → 一定进入对照组（隐藏 AI 助理）
-  // 只有在完全没有 group 参数时，才沿用会话 / 随机分配逻辑
+  // 见数平台负责随机分流：
+  //   ?group=treatment → 处理组（显示 AI 入口）
+  //   ?group=control   → 对照组（隐藏 AI 入口）
+  //   无 group 参数     → 按新规则默认进入对照组
   if (groupParam === 'treatment' || groupParam === 'control') {
     group = groupParam;
     groupSource = 'url';
   } else if (CONFIG.forceGroup === 'treatment' || CONFIG.forceGroup === 'control') {
     group = CONFIG.forceGroup;
     groupSource = 'config';
-  } else if (ctx && (ctx.group === 'treatment' || ctx.group === 'control')) {
-    group = ctx.group;
-    groupSource = 'session';
   } else {
-    var savedGroup = safeGet('od_group_' + subjectId);
-    if (savedGroup === 'treatment' || savedGroup === 'control') {
-      group = savedGroup;
-      groupSource = 'stored';
-    } else {
-      group = Math.random() < CONFIG.treatmentRatio ? 'treatment' : 'control';
-      groupSource = 'random';
-    }
+    group = CONFIG.defaultGroup;
+    groupSource = 'default';
   }
 
   safeSet('od_group_' + subjectId, group);
@@ -136,6 +131,22 @@
   }
 
   document.documentElement.setAttribute('data-group', group);
+
+  /* ---------------- 1.1 RCT 实验数据（供见数回收） ---------------- */
+
+  var expData = {
+    group: group,
+    path: 'none',
+    nodes: [],
+    startTime: Date.now(),
+    stay_time: 0,
+    backClicked: false,
+    homepageViewed: false
+  };
+  window.expData = expData;
+
+  // 处理组内部路径的点击次数（不含“继续浏览/返回问卷”）
+  var labelTaps = 0;
 
   /* ---------------- 2. 建立实验记录 ---------------- */
 
@@ -212,6 +223,7 @@
       pageView.dwell_ms += delta;
       lastTick = now;
     }
+    expData.stay_time = now - expData.startTime;
     save();
   }
 
@@ -369,6 +381,110 @@
     });
   }
 
+  /* ---------------- 6.1 RCT 状态机埋点接口 ---------------- */
+
+  function touchExpStay() {
+    expData.stay_time = Date.now() - expData.startTime;
+  }
+
+  function expSetPath(path) {
+    if (path !== 'A' && path !== 'B' && path !== 'C') return;
+    expData.path = path;
+    touchExpStay();
+    track('exp_path', { path: path });
+  }
+
+  function expPushNode(nodeId) {
+    if (!nodeId) return;
+    expData.nodes.push(nodeId);
+    touchExpStay();
+    track('exp_node', { node: nodeId, path: expData.path, index: expData.nodes.length });
+  }
+
+  function expTap(label, nodeId) {
+    labelTaps += 1;
+    touchExpStay();
+    track('exp_tap', { label: label || '', node: nodeId || '', count: labelTaps, path: expData.path });
+  }
+
+  function expMarkHomepageViewed() {
+    if (expData.homepageViewed) return;
+    expData.homepageViewed = true;
+    track('homepage_viewed');
+  }
+
+  function backStatus() {
+    var stay = Date.now() - expData.startTime;
+    expData.stay_time = stay;
+    var needStay = Math.max(0, CONFIG.minStayMs - stay);
+    var needTaps = group === 'control' ? 0 : Math.max(0, CONFIG.minTreatmentTaps - labelTaps);
+    return {
+      allowed: needStay === 0 && needTaps === 0,
+      stay: stay,
+      needStayMs: needStay,
+      needTaps: needTaps,
+      tapCount: labelTaps
+    };
+  }
+
+  function buildBackUrl(stayMs) {
+    try {
+      var u = new URL(CONFIG.credamoUrl);
+      u.searchParams.set('subject_id', subjectId);
+      u.searchParams.set('group', expData.group);
+      u.searchParams.set('path', expData.path);
+      u.searchParams.set('nodes', expData.nodes.join(','));
+      u.searchParams.set('stay', String(stayMs));
+      u.searchParams.set('back', '1');
+      return u.toString();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function backToSurvey() {
+    flushDwell();
+    var status = backStatus();
+    var target = buildBackUrl(status.stay);
+
+    if (!status.allowed) {
+      track('survey_back_blocked', {
+        stay: status.stay,
+        need_stay_ms: status.needStayMs,
+        need_taps: status.needTaps,
+        taps: status.tapCount
+      });
+      if (status.needStayMs > 0) {
+        toast('请再停留 ' + Math.ceil(status.needStayMs / 1000) + ' 秒后返回问卷');
+      } else {
+        toast('请先至少点击 ' + CONFIG.minTreatmentTaps + ' 次对话选项');
+      }
+      return false;
+    }
+
+    expData.backClicked = true;
+    expData.stay_time = status.stay;
+    track('survey_back', {
+      path: expData.path,
+      nodes: expData.nodes.join(','),
+      stay: status.stay,
+      url: target
+    });
+
+    if (!target || CONFIG.credamoUrl.indexOf('/xxx') !== -1) {
+      toast('问卷链接尚未配置，请修改 CONFIG.credamoUrl');
+      return false;
+    }
+
+    record.survey.redirected = true;
+    record.survey.redirected_at = nowIso();
+    save();
+    window.location.href = target;
+    return true;
+  }
+
+
+
   /* ---------------- 7. 决策与见数跳转 ---------------- */
 
   function markDecision(choice) {
@@ -393,6 +509,9 @@
       u.searchParams.set('decision', record.decision.completed ? '1' : '0');
       u.searchParams.set('time_to_decision_ms', record.decision.time_to_decision_ms || 0);
       u.searchParams.set('dwell_ms', totalDwell());
+      u.searchParams.set('path', expData.path);
+      u.searchParams.set('nodes', expData.nodes.join(','));
+      u.searchParams.set('stay', String(expData.stay_time || 0));
       return u.toString();
     } catch (e) {
       return '';
@@ -446,8 +565,11 @@
       experiment: 'online_doctor_ai_assistant',
       config: {
         credamo_url: CONFIG.credamoUrl,
-        treatment_ratio: CONFIG.treatmentRatio
+        default_group: CONFIG.defaultGroup,
+        min_stay_ms: CONFIG.minStayMs,
+        min_treatment_taps: CONFIG.minTreatmentTaps
       },
+      exp: expData,
       records: list
     };
 
@@ -571,6 +693,17 @@
 
   syncInternalLinks();
 
+  if (pageKey === 'doctor') expMarkHomepageViewed();
+
+  var backBtn = document.getElementById('od-back-survey');
+  if (backBtn) {
+    if (group === 'control') backBtn.hidden = false;
+    backBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      backToSurvey();
+    });
+  }
+
   document.querySelectorAll('[data-od-export]').forEach(function (el) {
     el.setAttribute('title', '导出 localStorage 中的实验数据（研究者使用）');
   });
@@ -618,6 +751,14 @@
     aiLog: aiLog,
     markDecision: markDecision,
     goSurvey: goSurvey,
+    backToSurvey: backToSurvey,
+    backStatus: backStatus,
+    buildBackUrl: buildBackUrl,
+    expData: expData,
+    expPath: expSetPath,
+    expNode: expPushNode,
+    expTap: expTap,
+    markHomepageViewed: expMarkHomepageViewed,
     exportData: exportData
   };
 
