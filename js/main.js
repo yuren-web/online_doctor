@@ -10,19 +10,15 @@
   /* ---------------- 可配置项 ---------------- */
 
   var CONFIG = {
-    // 见数问卷地址：部署前替换为真实链接
-    credamoUrl: 'https://www.credamo.com/xxx',
+    // 见数问卷地址：返回问卷一律跳这里，不拼接任何 URL 参数
+    credamoUrl: 'https://credamo.com/s/imUR7z/',
 
-    // 未指定 group 参数时默认进入对照组（新的 RCT 规则：无参数 = control）
+    // 未指定 group 参数时默认进入对照组（RCT 规则：无参数 = control）
     defaultGroup: 'control',
 
     // 强制分组：'treatment' | 'control' | null
     // 仅用于本地调试；URL 参数优先级最高
     forceGroup: null,
-
-    // 返回问卷门槛
-    minStayMs: 60000,
-    minTreatmentTaps: 3,
 
     // 数据存储
     recordsKey: 'od_records_v1',
@@ -413,73 +409,26 @@
     track('homepage_viewed');
   }
 
-  function backStatus() {
-    var stay = Date.now() - expData.startTime;
-    expData.stay_time = stay;
-    var needStay = Math.max(0, CONFIG.minStayMs - stay);
-    var needTaps = group === 'control' ? 0 : Math.max(0, CONFIG.minTreatmentTaps - labelTaps);
-    return {
-      allowed: needStay === 0 && needTaps === 0,
-      stay: stay,
-      needStayMs: needStay,
-      needTaps: needTaps,
-      tapCount: labelTaps
-    };
+  function showBackButton() {
+    var btn = document.getElementById('od-back-survey');
+    if (btn) btn.hidden = false;
   }
 
-  function buildBackUrl(stayMs) {
-    try {
-      var u = new URL(CONFIG.credamoUrl);
-      u.searchParams.set('subject_id', subjectId);
-      u.searchParams.set('group', expData.group);
-      u.searchParams.set('path', expData.path);
-      u.searchParams.set('nodes', expData.nodes.join(','));
-      u.searchParams.set('stay', String(stayMs));
-      u.searchParams.set('back', '1');
-      return u.toString();
-    } catch (e) {
-      return '';
-    }
-  }
-
+  // 所有“返回问卷”统一走这里：纯跳转，不拼接任何 URL 参数
   function backToSurvey() {
     flushDwell();
-    var status = backStatus();
-    var target = buildBackUrl(status.stay);
-
-    if (!status.allowed) {
-      track('survey_back_blocked', {
-        stay: status.stay,
-        need_stay_ms: status.needStayMs,
-        need_taps: status.needTaps,
-        taps: status.tapCount
-      });
-      if (status.needStayMs > 0) {
-        toast('请再停留 ' + Math.ceil(status.needStayMs / 1000) + ' 秒后返回问卷');
-      } else {
-        toast('请先至少点击 ' + CONFIG.minTreatmentTaps + ' 次对话选项');
-      }
-      return false;
-    }
-
     expData.backClicked = true;
-    expData.stay_time = status.stay;
+    expData.stay_time = Date.now() - expData.startTime;
     track('survey_back', {
       path: expData.path,
       nodes: expData.nodes.join(','),
-      stay: status.stay,
-      url: target
+      stay: expData.stay_time,
+      url: CONFIG.credamoUrl
     });
-
-    if (!target || CONFIG.credamoUrl.indexOf('/xxx') !== -1) {
-      toast('问卷链接尚未配置，请修改 CONFIG.credamoUrl');
-      return false;
-    }
-
     record.survey.redirected = true;
     record.survey.redirected_at = nowIso();
     save();
-    window.location.href = target;
+    window.location.href = CONFIG.credamoUrl;
     return true;
   }
 
@@ -500,39 +449,16 @@
     save();
   }
 
-  function surveyUrl() {
-    try {
-      var u = new URL(CONFIG.credamoUrl);
-      u.searchParams.set('subject_id', subjectId);
-      u.searchParams.set('group', group);
-      u.searchParams.set('ai_used', record.ai.clicked ? '1' : '0');
-      u.searchParams.set('decision', record.decision.completed ? '1' : '0');
-      u.searchParams.set('time_to_decision_ms', record.decision.time_to_decision_ms || 0);
-      u.searchParams.set('dwell_ms', totalDwell());
-      u.searchParams.set('path', expData.path);
-      u.searchParams.set('nodes', expData.nodes.join(','));
-      u.searchParams.set('stay', String(expData.stay_time || 0));
-      return u.toString();
-    } catch (e) {
-      return '';
-    }
-  }
-
   function goSurvey() {
     flushDwell();
-    var target = surveyUrl();
-    if (!target || CONFIG.credamoUrl.indexOf('/xxx') !== -1) {
-      toast('问卷链接尚未配置，请修改 js/main.js 中的 CONFIG.credamoUrl');
-      return false;
-    }
     record.survey.redirected = true;
     record.survey.redirected_at = nowIso();
     track('survey_redirect', {
       choice: record.decision.choice || '',
-      url: target
+      url: CONFIG.credamoUrl
     });
     save();
-    window.location.href = target;
+    window.location.href = CONFIG.credamoUrl;
     return true;
   }
 
@@ -565,9 +491,7 @@
       experiment: 'online_doctor_ai_assistant',
       config: {
         credamo_url: CONFIG.credamoUrl,
-        default_group: CONFIG.defaultGroup,
-        min_stay_ms: CONFIG.minStayMs,
-        min_treatment_taps: CONFIG.minTreatmentTaps
+        default_group: CONFIG.defaultGroup
       },
       exp: expData,
       records: list
@@ -697,7 +621,7 @@
 
   var backBtn = document.getElementById('od-back-survey');
   if (backBtn) {
-    if (group === 'control') backBtn.hidden = false;
+    if (group === 'control') showBackButton();
     backBtn.addEventListener('click', function (e) {
       e.preventDefault();
       backToSurvey();
@@ -752,8 +676,7 @@
     markDecision: markDecision,
     goSurvey: goSurvey,
     backToSurvey: backToSurvey,
-    backStatus: backStatus,
-    buildBackUrl: buildBackUrl,
+    showBackButton: showBackButton,
     expData: expData,
     expPath: expSetPath,
     expNode: expPushNode,

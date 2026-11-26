@@ -326,9 +326,10 @@
     var browse = document.createElement('button');
     browse.type = 'button';
     browse.className = 'ai-option';
-    browse.textContent = '继续浏览医生主页';
+    browse.textContent = '继续浏览医生页面';
     browse.addEventListener('click', function () {
       if (typeof OD.markHomepageViewed === 'function') OD.markHomepageViewed();
+      if (typeof OD.showBackButton === 'function') OD.showBackButton();
       closePanel();
       try {
         window.scrollTo({ top: 0, behavior: 'smooth' });

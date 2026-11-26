@@ -121,41 +121,30 @@ sessionStorage.removeItem('od_ctx_v1');
 
 - 处理组开场三选一确定 `path`，之后每次展示 AI 节点都会 push 到 `nodes`
 - 对照组 `path` 恒为 `none`，`nodes` 为空
-- 返回问卷门槛：停留 ≥ 60 秒；处理组还需至少点击 3 次对话选项
-- 未达门槛时点击返回，只提示剩余秒数/次数，不跳转
+- 返回问卷不设时间/点击门槛，点击后在当前标签页直接跳回见数，不拼接任何 URL 参数
 
 ## 见数（Credamo）对接
 
-在 `js/main.js` 顶部修改问卷地址：
+在 `js/main.js` 顶部配置问卷地址：
 
 ```js
 var CONFIG = {
-  credamoUrl: 'https://www.credamo.com/xxx', // 替换为真实问卷链接
+  credamoUrl: 'https://credamo.com/s/imUR7z/',
   defaultGroup: 'control',
-  minStayMs: 60000,
-  minTreatmentTaps: 3,
   forceGroup: null
 };
 ```
 
-点击「返回问卷」并满足门槛后，会跳转到该地址，自动携带参数：
+所有「返回问卷」按钮（对照组左下角、处理组对话结尾、处理组继续浏览后的悬浮按钮）都会执行：
 
-| 参数 | 说明 |
-| --- | --- |
-| `subject_id` | 被试 ID（与页面记录一一对应） |
-| `group` | `treatment` / `control` |
-| `path` | 处理组内部路径：`A` / `B` / `C`；对照组为 `none` |
-| `nodes` | 已展示节点，逗号分隔，如 `A2,A3,A5,A6,END_A`；对照组为空 |
-| `stay` | 页面停留时长（毫秒） |
-| `back` | 固定为 `1`，表示从「返回问卷」按钮进入 |
-
-示例：
-
-```
-https://www.credamo.com/xxx?subject_id=S001&group=treatment&path=A&nodes=A2%2CA3%2CA5%2CA6%2CEND_A&stay=96320&back=1
+```js
+window.location.href = 'https://credamo.com/s/imUR7z/';
 ```
 
-未配置链接时，页面会提示「问卷链接尚未配置」，不会跳转到无效地址。
+- 不拼接 `group` / `path` / `nodes` / `stay` / `back` 等任何参数
+- 在当前标签页跳转，见数问卷会话保留，返回后可继续填写后测
+- 分组由见数随机分流与操控检验题负责，网页只负责展示对应版本
+- 实验过程数据仍保存于浏览器 `localStorage`，可通过导出 JSON 单独分析
 
 ## 部署
 
@@ -178,7 +167,7 @@ https://your-domain.com/index.html?group=treatment&subject_id=S001
 - **医生信息 / 评价**：直接修改 `doctor.html` 中对应用户可见文本（列表页同步修改 `index.html`），并更新 `data/doctor-info.json`
 - **AI 对话剧本**：修改 `js/ai.js` 中的 `SCRIPT` 对象；A/B/C 三条路径分别对应 `SCRIPT.A`、`SCRIPT.B`、`SCRIPT.C`，每个节点包含 `text` 和 `options`，`next` 指向下一个节点，`end: true` 表示结尾节点
 - **开场三选一**：调整 `OPENING_CHOICES`（路径 + 标签文案 + 起始节点）
-- **返回门槛**：修改 `js/main.js` 中的 `minStayMs` 与 `minTreatmentTaps`
+- **返回问卷**：修改 `js/main.js` 中的 `CONFIG.credamoUrl`
 - **配色**：修改 `css/style.css` 顶部 `:root` 中的 CSS 变量
 - **分组默认值**：修改 `CONFIG.defaultGroup`（默认 `control`）
 
