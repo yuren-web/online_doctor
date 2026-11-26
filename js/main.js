@@ -11,7 +11,7 @@
 
   var CONFIG = {
     // 见数问卷地址：返回问卷一律跳这里，不拼接任何 URL 参数
-    credamoUrl: 'https://credamo.com/s/imUR7z/',
+    credamoUrl: 'https://www.credamo.com/s/imUR7z/',
 
     // 未指定 group 参数时默认进入对照组（RCT 规则：无参数 = control）
     defaultGroup: 'control',

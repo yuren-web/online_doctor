@@ -129,7 +129,7 @@ sessionStorage.removeItem('od_ctx_v1');
 
 ```js
 var CONFIG = {
-  credamoUrl: 'https://credamo.com/s/imUR7z/',
+  credamoUrl: 'https://www.credamo.com/s/imUR7z/',
   defaultGroup: 'control',
   forceGroup: null
 };
@@ -138,7 +138,7 @@ var CONFIG = {
 所有「返回问卷」按钮（对照组左下角、处理组对话结尾、处理组继续浏览后的悬浮按钮）都会执行：
 
 ```js
-window.location.href = 'https://credamo.com/s/imUR7z/';
+window.location.href = 'https://www.credamo.com/s/imUR7z/';
 ```
 
 - 不拼接 `group` / `path` / `nodes` / `stay` / `back` 等任何参数
