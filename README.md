@@ -129,7 +129,7 @@ sessionStorage.removeItem('od_ctx_v1');
 
 ```js
 var CONFIG = {
-  credamoUrl: 'https://www.credamo.com/s/bmMVbu/',
+  credamoUrl: 'https://www.credamo.com/s/VFNbayano/',
   defaultGroup: 'control',
   forceGroup: null
 };
@@ -143,7 +143,7 @@ if (cameFromSurvey() && window.history.length > 1) {
   window.history.back();
 } else {
   // 必须新开时，实验页标签继续保留
-  window.open('https://www.credamo.com/s/bmMVbu/', '_blank');
+  window.open('https://www.credamo.com/s/VFNbayano/', '_blank');
 }
 ```
 

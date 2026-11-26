@@ -11,7 +11,7 @@
 
   var CONFIG = {
     // 见数问卷地址：仅在需要新开标签页时使用，不拼接任何 URL 参数
-    credamoUrl: 'https://www.credamo.com/s/bmMVbu/',
+    credamoUrl: 'https://www.credamo.com/s/VFNbayano/',
 
     // 未指定 group 参数时默认进入对照组（RCT 规则：无参数 = control）
     defaultGroup: 'control',
