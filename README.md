@@ -121,7 +121,7 @@ sessionStorage.removeItem('od_ctx_v1');
 
 - 处理组开场三选一确定 `path`，之后每次展示 AI 节点都会 push 到 `nodes`
 - 对照组 `path` 恒为 `none`，`nodes` 为空
-- 返回问卷不设时间/点击门槛，点击后在当前标签页直接跳回见数，不拼接任何 URL 参数
+- 返回问卷不设时间/点击门槛；见数来源页优先 `history.back()`，否则用 `window.open()` 新开问卷
 
 ## 见数（Credamo）对接
 
@@ -129,20 +129,28 @@ sessionStorage.removeItem('od_ctx_v1');
 
 ```js
 var CONFIG = {
-  credamoUrl: 'https://www.credamo.com/s/imUR7z/',
+  credamoUrl: 'https://www.credamo.com/s/bmMVbu/',
   defaultGroup: 'control',
   forceGroup: null
 };
 ```
 
-所有「返回问卷」按钮（对照组左下角、处理组对话结尾、处理组继续浏览后的悬浮按钮）都会执行：
+所有「返回问卷」按钮（对照组左下角、处理组对话结尾、处理组继续浏览后的悬浮按钮）统一执行以下规则：
 
 ```js
-window.location.href = 'https://www.credamo.com/s/imUR7z/';
+// 从见数同标签页进入实验页时，保留原问卷会话与已填答案
+if (cameFromSurvey() && window.history.length > 1) {
+  window.history.back();
+} else {
+  // 必须新开时，实验页标签继续保留
+  window.open('https://www.credamo.com/s/bmMVbu/', '_blank');
+}
 ```
 
 - 不拼接 `group` / `path` / `nodes` / `stay` / `back` 等任何参数
-- 在当前标签页跳转，见数问卷会话保留，返回后可继续填写后测
+- 不使用 `location.href` / `location.replace` 将实验页整页跳到问卷裸链接
+- 返回或新开前，将分组、路径、节点、停留时间等实验进度同步保存到 `localStorage`
+- 从见数进入时优先 `history.back()`，利用原问卷会话保留前测答案并继续后测
 - 分组由见数随机分流与操控检验题负责，网页只负责展示对应版本
 - 实验过程数据仍保存于浏览器 `localStorage`，可通过导出 JSON 单独分析
 

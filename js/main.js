@@ -10,8 +10,8 @@
   /* ---------------- 可配置项 ---------------- */
 
   var CONFIG = {
-    // 见数问卷地址：返回问卷一律跳这里，不拼接任何 URL 参数
-    credamoUrl: 'https://www.credamo.com/s/imUR7z/',
+    // 见数问卷地址：仅在需要新开标签页时使用，不拼接任何 URL 参数
+    credamoUrl: 'https://www.credamo.com/s/bmMVbu/',
 
     // 未指定 group 参数时默认进入对照组（RCT 规则：无参数 = control）
     defaultGroup: 'control',
@@ -22,7 +22,8 @@
 
     // 数据存储
     recordsKey: 'od_records_v1',
-    ctxKey: 'od_ctx_v1'
+    ctxKey: 'od_ctx_v1',
+    progressKey: 'od_experiment_progress_v1'
   };
 
   /* ---------------- 基础工具 ---------------- */
@@ -203,6 +204,22 @@
     } catch (e) {
       /* ignore */
     }
+  }
+
+  function saveExperimentProgress() {
+    expData.stay_time = Date.now() - expData.startTime;
+    safeSet(CONFIG.progressKey, JSON.stringify({
+      subject_id: subjectId,
+      group: expData.group,
+      path: expData.path,
+      nodes: expData.nodes.slice(),
+      startTime: expData.startTime,
+      stay_time: expData.stay_time,
+      backClicked: expData.backClicked,
+      homepageViewed: expData.homepageViewed,
+      saved_at: nowIso()
+    }));
+    save();
   }
 
   save();
@@ -414,7 +431,37 @@
     if (btn) btn.hidden = false;
   }
 
-  // 所有“返回问卷”统一走这里：纯跳转，不拼接任何 URL 参数
+  function cameFromSurvey() {
+    if (!document.referrer) return false;
+    try {
+      return /(^|\.)credamo\.com$/i.test(new URL(document.referrer).hostname);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function leaveForSurvey() {
+    // 离开或新开前同步保存实验进度，确保返回后仍可恢复
+    saveExperimentProgress();
+
+    // 从见数同标签页进入时，优先后退以保留原问卷会话和已填答案
+    if (cameFromSurvey() && window.history.length > 1) {
+      window.history.back();
+      return 'history_back';
+    }
+
+    // 无见数来源或没有可后退历史时，新开问卷，实验页标签保留
+    var opened = window.open(CONFIG.credamoUrl, '_blank');
+    if (opened) {
+      try { opened.opener = null; } catch (e) { /* ignore */ }
+      return 'new_tab';
+    }
+
+    toast('浏览器拦截了新窗口，请允许弹出窗口后重试');
+    return 'blocked';
+  }
+
+  // 所有“返回问卷”统一走这里：不拼接 URL 参数，不整页裸跳问卷链接
   function backToSurvey() {
     flushDwell();
     expData.backClicked = true;
@@ -428,8 +475,7 @@
     record.survey.redirected = true;
     record.survey.redirected_at = nowIso();
     save();
-    window.location.href = CONFIG.credamoUrl;
-    return true;
+    return leaveForSurvey() !== 'blocked';
   }
 
 
@@ -458,8 +504,7 @@
       url: CONFIG.credamoUrl
     });
     save();
-    window.location.href = CONFIG.credamoUrl;
-    return true;
+    return leaveForSurvey() !== 'blocked';
   }
 
   /* ---------------- 8. 数据导出 ---------------- */
