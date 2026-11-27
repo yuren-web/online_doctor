@@ -1,6 +1,6 @@
 # 在线问诊 AI 助理实验平台
 
-一个可直接运行的在线问诊实验页面，风格参照好大夫在线。当前版本用于见数（Credamo）RCT 实验：处理组展示本地硬编码的 AI 助理（内部 A/B/C 三条对话路径），对照组不展示 AI，仅浏览医生主页并可返回问卷。全程不调用任何大模型或外部 API。
+一个可直接运行的在线问诊实验页面，风格参照好大夫在线。当前版本用于见数（Credamo）RCT 实验：处理组展示本地硬编码的 AI 助理（内部 A/B/C 三条对话路径），对照组不展示 AI，仅浏览医生主页。页面不包含任何返回问卷按钮或外部问卷跳转。全程不调用任何大模型或外部 API。
 
 纯静态实现，无外部依赖、无后端，可直接双击打开或部署到任意静态托管平台。
 
@@ -13,7 +13,7 @@ online_doctor/
 ├── css/
 │   └── style.css           # 全部样式（含响应式与 AI 悬浮窗）
 ├── js/
-│   ├── main.js             # 分组、RCT 埋点、停留时长、返回问卷、数据导出
+│   ├── main.js             # 分组、RCT 埋点、停留时长、数据导出
 │   ├── ai.js               # 处理组 AI 助理：本地 A/B/C 状态机（零网络请求）
 │   └── worker.js           # 原 Cloudflare Worker（已短路停用，保留存档）
 ├── data/
@@ -121,38 +121,16 @@ sessionStorage.removeItem('od_ctx_v1');
 
 - 处理组开场三选一确定 `path`，之后每次展示 AI 节点都会 push 到 `nodes`
 - 对照组 `path` 恒为 `none`，`nodes` 为空
-- 返回问卷不设时间/点击门槛；见数来源页优先 `history.back()`，否则用 `window.open()` 新开问卷
+- 页面不包含返回问卷按钮或外部问卷跳转，实验数据仅保存在浏览器 `localStorage` 中
 
-## 见数（Credamo）对接
+## 数据集市发布说明
 
-在 `js/main.js` 顶部配置问卷地址：
+问卷改为见数数据集市发布，没有对外问卷链接，因此：
 
-```js
-var CONFIG = {
-  credamoUrl: 'https://www.credamo.com/s/VFNbayano/',
-  defaultGroup: 'control',
-  forceGroup: null
-};
-```
-
-所有「返回问卷」按钮（对照组左下角、处理组对话结尾、处理组继续浏览后的悬浮按钮）统一执行以下规则：
-
-```js
-// 从见数同标签页进入实验页时，保留原问卷会话与已填答案
-if (cameFromSurvey() && window.history.length > 1) {
-  window.history.back();
-} else {
-  // 必须新开时，实验页标签继续保留
-  window.open('https://www.credamo.com/s/VFNbayano/', '_blank');
-}
-```
-
-- 不拼接 `group` / `path` / `nodes` / `stay` / `back` 等任何参数
-- 不使用 `location.href` / `location.replace` 将实验页整页跳到问卷裸链接
-- 返回或新开前，将分组、路径、节点、停留时间等实验进度同步保存到 `localStorage`
-- 从见数进入时优先 `history.back()`，利用原问卷会话保留前测答案并继续后测
-- 分组由见数随机分流与操控检验题负责，网页只负责展示对应版本
-- 实验过程数据仍保存于浏览器 `localStorage`，可通过导出 JSON 单独分析
+- 页面不包含「返回问卷」按钮，也不包含任何指向见数的跳转逻辑
+- 控制组只浏览医生主页，处理组可正常使用本地 AI 对话
+- 实验数据保存在浏览器 `localStorage`，通过页脚「实验数据导出」获取 JSON
+- 分组仍通过 `?group=treatment` / `?group=control` 控制，无参数默认对照组
 
 ## 部署
 
@@ -168,14 +146,13 @@ if (cameFromSurvey() && window.history.length > 1) {
 https://your-domain.com/index.html?group=treatment&subject_id=S001
 ```
 
-建议实验前为处理组、对照组各准备一条链接，或在见数问卷中按分组跳转。
+建议实验前为处理组、对照组各准备一条链接，通过分组参数区分版本。
 
 ## 自定义
 
 - **医生信息 / 评价**：直接修改 `doctor.html` 中对应用户可见文本（列表页同步修改 `index.html`），并更新 `data/doctor-info.json`
 - **AI 对话剧本**：修改 `js/ai.js` 中的 `SCRIPT` 对象；A/B/C 三条路径分别对应 `SCRIPT.A`、`SCRIPT.B`、`SCRIPT.C`，每个节点包含 `text` 和 `options`，`next` 指向下一个节点，`end: true` 表示结尾节点
 - **开场三选一**：调整 `OPENING_CHOICES`（路径 + 标签文案 + 起始节点）
-- **返回问卷**：修改 `js/main.js` 中的 `CONFIG.credamoUrl`
 - **配色**：修改 `css/style.css` 顶部 `:root` 中的 CSS 变量
 - **分组默认值**：修改 `CONFIG.defaultGroup`（默认 `control`）
 

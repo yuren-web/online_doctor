@@ -10,9 +10,6 @@
   /* ---------------- 可配置项 ---------------- */
 
   var CONFIG = {
-    // 见数问卷地址：仅在需要新开标签页时使用，不拼接任何 URL 参数
-    credamoUrl: 'https://www.credamo.com/s/VFNbayano/',
-
     // 未指定 group 参数时默认进入对照组（RCT 规则：无参数 = control）
     defaultGroup: 'control',
 
@@ -22,8 +19,7 @@
 
     // 数据存储
     recordsKey: 'od_records_v1',
-    ctxKey: 'od_ctx_v1',
-    progressKey: 'od_experiment_progress_v1'
+    ctxKey: 'od_ctx_v1'
   };
 
   /* ---------------- 基础工具 ---------------- */
@@ -142,7 +138,7 @@
   };
   window.expData = expData;
 
-  // 处理组内部路径的点击次数（不含“继续浏览/返回问卷”）
+  // 处理组内部路径的点击次数（不含“继续浏览医生页面”）
   var labelTaps = 0;
 
   /* ---------------- 2. 建立实验记录 ---------------- */
@@ -204,22 +200,6 @@
     } catch (e) {
       /* ignore */
     }
-  }
-
-  function saveExperimentProgress() {
-    expData.stay_time = Date.now() - expData.startTime;
-    safeSet(CONFIG.progressKey, JSON.stringify({
-      subject_id: subjectId,
-      group: expData.group,
-      path: expData.path,
-      nodes: expData.nodes.slice(),
-      startTime: expData.startTime,
-      stay_time: expData.stay_time,
-      backClicked: expData.backClicked,
-      homepageViewed: expData.homepageViewed,
-      saved_at: nowIso()
-    }));
-    save();
   }
 
   save();
@@ -426,61 +406,7 @@
     track('homepage_viewed');
   }
 
-  function showBackButton() {
-    var btn = document.getElementById('od-back-survey');
-    if (btn) btn.hidden = false;
-  }
-
-  function cameFromSurvey() {
-    if (!document.referrer) return false;
-    try {
-      return /(^|\.)credamo\.com$/i.test(new URL(document.referrer).hostname);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function leaveForSurvey() {
-    // 离开或新开前同步保存实验进度，确保返回后仍可恢复
-    saveExperimentProgress();
-
-    // 从见数同标签页进入时，优先后退以保留原问卷会话和已填答案
-    if (cameFromSurvey() && window.history.length > 1) {
-      window.history.back();
-      return 'history_back';
-    }
-
-    // 无见数来源或没有可后退历史时，新开问卷，实验页标签保留
-    var opened = window.open(CONFIG.credamoUrl, '_blank');
-    if (opened) {
-      try { opened.opener = null; } catch (e) { /* ignore */ }
-      return 'new_tab';
-    }
-
-    toast('浏览器拦截了新窗口，请允许弹出窗口后重试');
-    return 'blocked';
-  }
-
-  // 所有“返回问卷”统一走这里：不拼接 URL 参数，不整页裸跳问卷链接
-  function backToSurvey() {
-    flushDwell();
-    expData.backClicked = true;
-    expData.stay_time = Date.now() - expData.startTime;
-    track('survey_back', {
-      path: expData.path,
-      nodes: expData.nodes.join(','),
-      stay: expData.stay_time,
-      url: CONFIG.credamoUrl
-    });
-    record.survey.redirected = true;
-    record.survey.redirected_at = nowIso();
-    save();
-    return leaveForSurvey() !== 'blocked';
-  }
-
-
-
-  /* ---------------- 7. 决策与见数跳转 ---------------- */
+  /* ---------------- 7. 决策记录 ---------------- */
 
   function markDecision(choice) {
     if (!record.decision.completed) {
@@ -493,18 +419,6 @@
       track('decision_again', { choice: choice || '' });
     }
     save();
-  }
-
-  function goSurvey() {
-    flushDwell();
-    record.survey.redirected = true;
-    record.survey.redirected_at = nowIso();
-    track('survey_redirect', {
-      choice: record.decision.choice || '',
-      url: CONFIG.credamoUrl
-    });
-    save();
-    return leaveForSurvey() !== 'blocked';
   }
 
   /* ---------------- 8. 数据导出 ---------------- */
@@ -535,7 +449,6 @@
       exported_at: nowIso(),
       experiment: 'online_doctor_ai_assistant',
       config: {
-        credamo_url: CONFIG.credamoUrl,
         default_group: CONFIG.defaultGroup
       },
       exp: expData,
@@ -593,9 +506,6 @@
     var choice = checked ? checked.value : '';
     markDecision(choice);
     track('consult_type_selected', { choice: choice });
-
-    var redirected = goSurvey();
-    if (redirected) return;
 
     var body = modal.querySelector('.modal-body');
     if (body) {
@@ -664,15 +574,6 @@
 
   if (pageKey === 'doctor') expMarkHomepageViewed();
 
-  var backBtn = document.getElementById('od-back-survey');
-  if (backBtn) {
-    if (group === 'control') showBackButton();
-    backBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      backToSurvey();
-    });
-  }
-
   document.querySelectorAll('[data-od-export]').forEach(function (el) {
     el.setAttribute('title', '导出 localStorage 中的实验数据（研究者使用）');
   });
@@ -719,9 +620,6 @@
     aiClose: aiClose,
     aiLog: aiLog,
     markDecision: markDecision,
-    goSurvey: goSurvey,
-    backToSurvey: backToSurvey,
-    showBackButton: showBackButton,
     expData: expData,
     expPath: expSetPath,
     expNode: expPushNode,

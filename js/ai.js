@@ -109,8 +109,7 @@
       B6: {
         text: '目前这位医生的患者综合评分是4.9分（满分5分），共有326条患者评价。您也可以查看具体评价内容，了解其他患者的实际服务体验。',
         options: [
-          { label: '这个回复速度还可以，我想再看看具体患者评价', next: 'END_B' },
-          { label: '返回问卷继续作答', action: 'back' }
+          { label: '这个回复速度还可以，我想再看看具体患者评价', next: 'END_B' }
         ]
       },
       END_B: {
@@ -149,8 +148,7 @@
       C6: {
         text: SERVICE_LINE + '这些数据可以帮助您了解医生过去的服务情况，但不能直接证明每项诊疗建议的合理性。',
         options: [
-          { label: '好的，我明白了，我还是想再看看其他患者评价，再决定', next: 'END_C' },
-          { label: '返回问卷继续作答', action: 'back' }
+          { label: '好的，我明白了，我还是想再看看其他患者评价，再决定', next: 'END_C' }
         ]
       },
       END_C: {
@@ -293,13 +291,6 @@
     }
 
     renderChoices(node.options || [], function (choice, wrap) {
-      if (choice.action === 'back') {
-        if (typeof OD.expTap === 'function') OD.expTap(choice.label, nodeId);
-        log('user', choice.label, nodeId);
-        if (typeof OD.backToSurvey === 'function') OD.backToSurvey();
-        return;
-      }
-
       if (typeof OD.expTap === 'function') OD.expTap(choice.label, nodeId);
       wrap.parentNode.removeChild(wrap);
       optionsWrap = null;
@@ -315,21 +306,12 @@
     var wrap = document.createElement('div');
     wrap.className = 'ai-options ai-end-actions';
 
-    var back = document.createElement('button');
-    back.type = 'button';
-    back.className = 'ai-option ai-option-primary';
-    back.textContent = '返回问卷';
-    back.addEventListener('click', function () {
-      if (typeof OD.backToSurvey === 'function') OD.backToSurvey();
-    });
-
     var browse = document.createElement('button');
     browse.type = 'button';
-    browse.className = 'ai-option';
+    browse.className = 'ai-option ai-option-primary';
     browse.textContent = '继续浏览医生页面';
     browse.addEventListener('click', function () {
       if (typeof OD.markHomepageViewed === 'function') OD.markHomepageViewed();
-      if (typeof OD.showBackButton === 'function') OD.showBackButton();
       closePanel();
       try {
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -338,7 +320,6 @@
       }
     });
 
-    wrap.appendChild(back);
     wrap.appendChild(browse);
     optionsWrap = wrap;
     body.appendChild(wrap);

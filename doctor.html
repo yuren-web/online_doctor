@@ -366,9 +366,6 @@
     <button type="button" class="btn btn-primary" data-od-action="decision" data-track="consult_entry" data-track-label="移动端立即问诊">立即问诊</button>
   </div>
 
-  <!-- 对照组：返回见数问卷 -->
-  <button type="button" class="od-back-survey" id="od-back-survey" hidden>返回问卷</button>
-
   <!-- 决策确认弹窗 -->
   <div class="modal-mask" id="decision-modal" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="decision-title">
@@ -396,10 +393,10 @@
         </label>
 
         <div class="modal-note">
-          提交后将进入研究者问卷，请根据刚才的真实感受作答。问卷大约需要 3-5 分钟。
+          提交后将记录您的问诊选择，数据保存在当前浏览器中。
         </div>
 
-        <button type="button" class="btn btn-primary btn-block" data-od-action="submit-decision">提交并继续</button>
+        <button type="button" class="btn btn-primary btn-block" data-od-action="submit-decision">提交</button>
         <p class="modal-fine">本页面为学术研究模拟环境，不会产生真实费用和真实问诊订单。</p>
       </div>
     </div>
